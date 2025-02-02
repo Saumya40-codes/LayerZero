@@ -1,12 +1,31 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
+	"net"
 	"syscall"
 )
 
+var ip string
+
 func main() {
+	flag.StringVar(&ip, "ip", "8.8.8.8", "IP address to send ICMP packet")
+	flag.Parse()
+
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		log.Fatalf("Invalid IP address: %s", ip)
+		return
+	}
+
+	ipBytes := parsedIP.To4()
+	if ipBytes == nil {
+		log.Fatalf("Invalid IP address: %s", ip)
+		return
+	}
+
 	socket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_ICMP)
 	if err != nil {
 		fmt.Println("Error creating socket")
@@ -17,7 +36,7 @@ func main() {
 
 	destAddr := &syscall.SockaddrInet4{
 		Port: 0,
-		Addr: [4]byte{8, 8, 8, 8},
+		Addr: [4]byte{ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3]},
 	}
 
 	// ref: https://www.geeksforgeeks.org/internet-control-message-protocol-icmp/
