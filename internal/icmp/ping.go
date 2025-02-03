@@ -1,10 +1,24 @@
 package icmp
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 	"syscall"
+	"time"
 )
+
+type Response struct {
+	IP                 string  `json:"ip"`
+	RTT                float64 `json:"rtt"`
+	Addr               string  `json:"addr"`
+	TTL                int     `json:"ttl"`
+	ICMPType           int     `json:"icmp_type"`
+	ICMPCode           int     `json:"icmp_code"`
+	ICMPIdentifier     int     `json:"icmp_identifier"`
+	ICMPSequenceNumber int     `json:"icmp_sequence_number"`
+}
 
 func ping(ipBytes net.IP, addrtype string) {
 	// Code for sending ICMP packet to an IPv4 address
@@ -28,12 +42,51 @@ func ping(ipBytes net.IP, addrtype string) {
 	icmpPacket[2] = byte(checksum >> 8)
 	icmpPacket[3] = byte(checksum & 0xFF)
 
+	startTime := time.Now()
+
 	err := syscall.Sendto(socket, icmpPacket, 0, destAddr)
 	if err != nil {
 		log.Fatalf("Error sending packet: %v", err)
 	}
 
 	log.Println("ICMP packet sent successfully")
+
+	var buf [512]byte
+	_, _, err = syscall.Recvfrom(socket, buf[:], 0)
+	if err != nil {
+		log.Fatalf("Error receiving packet: %v", err)
+	}
+
+	endTime := time.Now()
+
+	elapsed := endTime.Sub(startTime)
+
+	log.Println("ICMP packet received successfully")
+
+	ttl := int(buf[8])
+
+	icmpType := int(buf[20])
+	icmpCode := int(buf[21])
+	icmpIdentifier := int(buf[24])<<8 + int(buf[25])
+	icmpSequenceNumber := int(buf[26])<<8 + int(buf[27])
+
+	response := Response{
+		IP:                 ipBytes.String(),
+		RTT:                float64(elapsed.Microseconds()) / 1000.0,
+		Addr:               addrtype,
+		TTL:                ttl,
+		ICMPType:           icmpType,
+		ICMPCode:           icmpCode,
+		ICMPIdentifier:     icmpIdentifier,
+		ICMPSequenceNumber: icmpSequenceNumber,
+	}
+
+	jsonResponse, err := json.MarshalIndent(response, "", " ")
+	if err != nil {
+		log.Fatalf("Error marshalling response: %v", err)
+	}
+
+	fmt.Println(string(jsonResponse))
 }
 
 func createIPv4Socket(ipBytes net.IP) (int, *syscall.SockaddrInet4) {
